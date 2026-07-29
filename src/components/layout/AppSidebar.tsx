@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router';
 
-import { LayoutDashboard, LogOut, Tent } from 'lucide-react';
+import { History, LayoutDashboard, LogOut, Tent } from 'lucide-react';
 
 import {
   Sidebar,
@@ -18,6 +18,11 @@ const navigation = [
     name: 'Dashboard',
     href: '/dashboard',
     icon: LayoutDashboard,
+  },
+  {
+    name: 'All Sessions',
+    href: '/sessions',
+    icon: History,
   },
   {
     name: 'Camp Mode',

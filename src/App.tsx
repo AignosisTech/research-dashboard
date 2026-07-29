@@ -11,6 +11,7 @@ import { setNavigate } from '@/lib/api/client';
 import { LoginPage } from '@/pages/auth/LoginPage';
 import { CampDetailPage } from '@/pages/camps/CampDetailPage';
 import { CampsPage } from '@/pages/camps/CampsPage';
+import { AllSessions } from '@/pages/dashboard/AllSessions';
 import { Dashboard } from '@/pages/dashboard/Dashboard';
 import { Calibration } from '@/pages/test/Calibration';
 import { Fillup } from '@/pages/test/Fillup';
@@ -40,6 +41,16 @@ function App() {
               <ProtectedRoute>
                 <DashboardLayout title="Research Dashboard" description="Research data collection">
                   <Dashboard />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/sessions"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout title="All Sessions" description="Every research capture session">
+                  <AllSessions />
                 </DashboardLayout>
               </ProtectedRoute>
             }

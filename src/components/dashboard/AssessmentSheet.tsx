@@ -74,6 +74,7 @@ export const AssessmentSheet = ({ session, open, onOpenChange }: AssessmentSheet
   const handleSaved = () => {
     void queryClient.invalidateQueries({ queryKey: ['researchAssessment', sessionId] });
     void queryClient.invalidateQueries({ queryKey: ['researchSessions'] });
+    void queryClient.invalidateQueries({ queryKey: ['allResearchSessions'] });
   };
 
   const sessionPatient = session.patient_info ?? null;

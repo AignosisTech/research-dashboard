@@ -94,7 +94,9 @@ export async function getResearchSessionsOfflineAware(): Promise<ResearchSession
 
   let serverSessions: ResearchSessionSummary[];
   try {
-    serverSessions = await getResearchSessions();
+    // First page only — this feeds the dashboard's recents card; the full
+    // history lives on the paginated All Sessions page (online-only).
+    serverSessions = (await getResearchSessions()).items;
     if (cacheKey) {
       await putMetadataCacheEntry(cacheKey, serverSessions);
     }

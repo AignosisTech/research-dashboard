@@ -148,13 +148,44 @@ export const createResearchSession = async (
   return data.details;
 };
 
-export const getResearchSessions = async (): Promise<ResearchSessionSummary[]> => {
-  const { data } =
-    await apiClient.get<ApiResponse<{ items: ResearchSessionSummary[] }>>('/research/sessions');
+export interface PaginatedSessions {
+  items: ResearchSessionSummary[];
+  next_cursor: string | null;
+  has_more: boolean;
+  count: number;
+  /** Only present when include_total was requested. */
+  total_count?: number;
+}
+
+export interface GetResearchSessionsOptions {
+  pageSize?: number;
+  lastCursor?: string;
+  includeTotal?: boolean;
+}
+
+export const getResearchSessions = async (
+  options: GetResearchSessionsOptions = {}
+): Promise<PaginatedSessions> => {
+  const params = new URLSearchParams();
+  if (options.pageSize) params.append('page_size', String(options.pageSize));
+  if (options.lastCursor) params.append('last_cursor', options.lastCursor);
+  if (options.includeTotal) params.append('include_total', 'true');
+  const suffix = params.size > 0 ? `?${params.toString()}` : '';
+
+  const { data } = await apiClient.get<ApiResponse<PaginatedSessions>>(
+    `/research/sessions${suffix}`
+  );
   if (!data.success) {
     throw new Error(data.message || 'Failed to fetch research sessions');
   }
-  return data.details.items;
+  // Tolerate a pre-pagination backend that returned only {items}.
+  return {
+    items: data.details.items ?? [],
+    next_cursor: data.details.next_cursor ?? null,
+    has_more: data.details.has_more ?? false,
+    count: data.details.count ?? data.details.items?.length ?? 0,
+    total_count: data.details.total_count,
+  };
 };
 
 /** Server-side state of an offline-created session, for reconciliation. */
