@@ -9,6 +9,8 @@ import { Toaster } from '@/components/ui/sonner';
 import { useAuthInitialization } from '@/hooks/useAuthInitialization';
 import { setNavigate } from '@/lib/api/client';
 import { LoginPage } from '@/pages/auth/LoginPage';
+import { CampDetailPage } from '@/pages/camps/CampDetailPage';
+import { CampsPage } from '@/pages/camps/CampsPage';
 import { Dashboard } from '@/pages/dashboard/Dashboard';
 import { Calibration } from '@/pages/test/Calibration';
 import { Fillup } from '@/pages/test/Fillup';
@@ -38,6 +40,26 @@ function App() {
               <ProtectedRoute>
                 <DashboardLayout title="Research Dashboard" description="Research data collection">
                   <Dashboard />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/camps"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout title="Camp Mode" description="Field camp data collection">
+                  <CampsPage />
+                </DashboardLayout>
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/camps/:campId"
+            element={
+              <ProtectedRoute>
+                <DashboardLayout title="Camp Mode" description="Field camp data collection">
+                  <CampDetailPage />
                 </DashboardLayout>
               </ProtectedRoute>
             }

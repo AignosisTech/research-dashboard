@@ -12,6 +12,7 @@ interface PhoneInputProps {
   defaultCountry?: Country;
   className?: string;
   placeholder?: string;
+  disabled?: boolean;
 }
 
 // Convert phone number to E.164 format if it's not already
@@ -55,6 +56,7 @@ export const PhoneInput = ({
   defaultCountry = 'IN',
   className,
   placeholder = 'Enter phone number',
+  disabled,
 }: PhoneInputProps) => {
   // Normalize the value to E.164 format
   const normalizedValue = useMemo(() => {
@@ -71,7 +73,12 @@ export const PhoneInput = ({
       //@ts-expect-error onChange type mismatch
       onChange={onChange}
       placeholder={placeholder}
-      className={cn('flex px-3 py-2 rounded-md border border-input bg-background', className)}
+      disabled={disabled}
+      className={cn(
+        'flex px-3 py-2 rounded-md border border-input bg-background',
+        disabled && 'opacity-60',
+        className
+      )}
       inputComponent={Input}
     />
   );

@@ -8,6 +8,7 @@ import { Questionnaire, type QuestionnaireData } from '@/components/test/Questio
 import { TestSubmitLoader } from '@/components/test/TestSubmitLoader';
 import { type ResearchTestUploadResponse, submitResearchQuestionnaire } from '@/lib/api/research';
 import type { QuestionnaireData as ApiQuestionnaireData } from '@/lib/api/screening';
+import { markCampChildRecorded } from '@/lib/camps/recordFlow';
 import { autismFacts } from '@/lib/constants/facts';
 import { putPendingQuestionnaire } from '@/lib/offline/db';
 import { getUidFromToken } from '@/lib/offline/jwt';
@@ -137,6 +138,10 @@ export const QuestionnairePage = () => {
         // dashboard list so the completed session shows without a manual reload.
         void queryClient.invalidateQueries({ queryKey: ['researchSessions'] });
 
+        if (testData.camp_child_id) {
+          await markCampChildRecorded(testData.camp_child_id);
+        }
+
         clearUploadPromises();
         navigate('/test/thankyou', { replace: true });
       } catch (err) {
@@ -156,6 +161,7 @@ export const QuestionnairePage = () => {
     skippedQuestionnaire,
     uploadPromises,
     testData.session_id,
+    testData.camp_child_id,
     setTestData,
     clearUploadPromises,
     navigate,

@@ -1,4 +1,8 @@
-import type { ResearchSessionCreatePayload, StimulusVersion } from '@/lib/api/research';
+import type {
+  GroundTruth,
+  ResearchSessionCreatePayload,
+  StimulusVersion,
+} from '@/lib/api/research';
 import type { QuestionnaireData } from '@/lib/api/screening';
 import type { StoredAssessmentId } from '@/lib/assessments/registry';
 
@@ -93,10 +97,93 @@ export interface SyncStatusSnapshot {
   pendingUploadCount: number;
   pendingQuestionnaireCount: number;
   pendingAssessmentCount: number;
+  pendingGroundTruthCount: number;
   failedCount: number;
   pausedForAuth: boolean;
   isSyncing: boolean;
   lastSyncError: string | null;
+}
+
+// --- camp mode ---------------------------------------------------------------
+
+/**
+ * Test-setup answers collected once at camp creation instead of per child:
+ * the whole camp runs on the same device with the same configuration.
+ */
+export interface CampSettings {
+  /** Which stimulus versions to capture per child, in play order. */
+  stimulusVersions: StimulusVersion[];
+  videoLanguage: 'english' | 'hindi';
+  screenSizeInch: number;
+  dataUsageConsent: boolean;
+}
+
+/**
+ * A field data-collection camp. Camps and their rosters are device-local only
+ * (IndexedDB) — the server never stores a roster. The only server-side trace is
+ * the camp_name tag on sessions recorded from this camp.
+ */
+export interface CampRecord {
+  /** crypto.randomUUID() */
+  id: string;
+  uid: string;
+  name: string;
+  location?: string;
+  /** Absent only on camps created before settings existed — those fall back to the intake form. */
+  settings?: CampSettings;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/**
+ * 'pending' | 'recorded' is what we store; "synced" is derived at render time
+ * from the pending* queues so the roster can never disagree with the sync
+ * engine's actual state.
+ */
+export type CampChildStatus = 'pending' | 'recorded';
+
+/** One roster row — a child registered for a camp via Excel import. */
+export interface CampChildRecord {
+  /** crypto.randomUUID() */
+  id: string;
+  campId: string;
+  uid: string;
+  /** Original roster order, for stable display. */
+  rowIndex: number;
+  name: string;
+  /** YYYY-MM-DD */
+  dob: string;
+  gender: 'male' | 'female' | 'other';
+  /** '' when the roster did not provide one. */
+  guardianPhone: string;
+  /** Pre-built payload from the roster's Ground Truth column; null if absent. */
+  groundTruth: GroundTruth | null;
+  notes: string;
+  status: CampChildStatus;
+  /** Set when a recording is started for this child. */
+  clientSessionId?: string;
+  /** Derived/server session id — links the child to its research session. */
+  sessionId?: string;
+  recordedAt?: number;
+  createdAt: number;
+  updatedAt: number;
+}
+
+/**
+ * Roster ground truth waiting to be written to the child's session. Applied by
+ * the sync engine once the session exists server-side, and only if the server's
+ * ground_truth is still null (a manual label always wins).
+ */
+export interface PendingGroundTruthRecord {
+  /** Session id (primary key) — one roster ground truth per session. */
+  session_id: string;
+  uid: string;
+  campChildId: string;
+  payload: GroundTruth;
+  syncStatus: PendingItemStatus;
+  lastError: string | null;
+  attempts: number;
+  createdAt: number;
 }
 
 /** Resolved value of an upload promise that was saved locally instead of sent. */

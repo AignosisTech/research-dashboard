@@ -51,6 +51,10 @@ export interface TestData {
   encrypted_mirror_frame: Blob | null;
   test_id: string | null;
   questionnaire_data: QuestionnaireData | null;
+  /** Set when this session was started from a camp roster row. */
+  camp_child_id: string | null;
+  camp_id: string | null;
+  camp_name: string | null;
 }
 
 const initialTestData: TestData = {
@@ -82,6 +86,9 @@ const initialTestData: TestData = {
   encrypted_mirror_frame: null,
   test_id: null,
   questionnaire_data: null,
+  camp_child_id: null,
+  camp_id: null,
+  camp_name: null,
 };
 
 interface TestState {

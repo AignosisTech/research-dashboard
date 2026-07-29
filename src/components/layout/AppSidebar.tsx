@@ -1,6 +1,6 @@
 import { Link, useLocation, useNavigate } from 'react-router';
 
-import { LayoutDashboard, LogOut } from 'lucide-react';
+import { LayoutDashboard, LogOut, Tent } from 'lucide-react';
 
 import {
   Sidebar,
@@ -18,6 +18,11 @@ const navigation = [
     name: 'Dashboard',
     href: '/dashboard',
     icon: LayoutDashboard,
+  },
+  {
+    name: 'Camp Mode',
+    href: '/camps',
+    icon: Tent,
   },
 ];
 
@@ -47,7 +52,8 @@ export const AppSidebar = () => {
         <SidebarMenu className="space-y-0.5">
           {navigation.map(item => {
             const Icon = item.icon;
-            const isActive = location.pathname === item.href;
+            const isActive =
+              location.pathname === item.href || location.pathname.startsWith(`${item.href}/`);
             return (
               <SidebarMenuItem key={item.name}>
                 <SidebarMenuButton

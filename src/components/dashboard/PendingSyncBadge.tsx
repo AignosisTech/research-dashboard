@@ -8,8 +8,8 @@ import { useSyncStatus } from '@/lib/offline/useSyncStatus';
 
 /**
  * Header badge summarising everything captured on this device that still owes
- * the server something: session creates, run uploads, questionnaires, and
- * assessments. Click = force a sync pass.
+ * the server something: session creates, run uploads, questionnaires,
+ * assessments, and camp-roster ground truths. Click = force a sync pass.
  */
 export const PendingSyncBadge = () => {
   const status = useSyncStatus();
@@ -17,7 +17,8 @@ export const PendingSyncBadge = () => {
     status.pendingSessionCount +
     status.pendingUploadCount +
     status.pendingQuestionnaireCount +
-    status.pendingAssessmentCount;
+    status.pendingAssessmentCount +
+    status.pendingGroundTruthCount;
 
   if (count === 0 && !status.pausedForAuth) return null;
 

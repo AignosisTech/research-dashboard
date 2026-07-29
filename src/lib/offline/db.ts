@@ -1,9 +1,12 @@
 import Dexie, { type EntityTable } from 'dexie';
 
 import type {
+  CampChildRecord,
+  CampRecord,
   DraftRunRecord,
   MetadataCacheEntry,
   PendingAssessmentRecord,
+  PendingGroundTruthRecord,
   PendingQuestionnaireRecord,
   PendingSessionRecord,
 } from './types';
@@ -54,6 +57,9 @@ export const db = new Dexie('aignosis-research') as Dexie & {
   pendingAssessments: EntityTable<PendingAssessmentRecord, 'id'>;
   metadataCache: EntityTable<MetadataCacheEntry, 'key'>;
   draftRuns: EntityTable<DraftRunRecord, 'id'>;
+  camps: EntityTable<CampRecord, 'id'>;
+  campChildren: EntityTable<CampChildRecord, 'id'>;
+  pendingGroundTruths: EntityTable<PendingGroundTruthRecord, 'session_id'>;
 };
 
 // v1 stored blobs inline on pendingUploads; v2 splits them out.
@@ -100,6 +106,20 @@ db.version(3).stores({
   pendingAssessments: 'id, session_id, uid, syncStatus',
   metadataCache: 'key, fetchedAt',
   draftRuns: 'id, uid, updatedAt',
+});
+// v4 adds Camp Mode: device-local camps + rosters, and the queue of
+// roster-derived ground truths applied after a session syncs.
+db.version(4).stores({
+  pendingUploads: 'id, session_id, created_at',
+  pendingUploadBlobs: 'id',
+  pendingSessions: 'session_id, uid, syncStatus, createdAt',
+  pendingQuestionnaires: 'session_id, uid, syncStatus',
+  pendingAssessments: 'id, session_id, uid, syncStatus',
+  metadataCache: 'key, fetchedAt',
+  draftRuns: 'id, uid, updatedAt',
+  camps: 'id, uid, createdAt',
+  campChildren: 'id, campId, uid, sessionId, createdAt',
+  pendingGroundTruths: 'session_id, uid, syncStatus',
 });
 
 // --- pending sessions -------------------------------------------------------
@@ -175,6 +195,76 @@ export async function listPendingAssessmentsForSession(
 
 export async function deletePendingAssessment(id: string): Promise<void> {
   await db.pendingAssessments.delete(id);
+}
+
+// --- camps ------------------------------------------------------------------
+
+export async function putCamp(record: CampRecord): Promise<void> {
+  await db.camps.put(record);
+}
+
+export async function getCamp(campId: string): Promise<CampRecord | undefined> {
+  return db.camps.get(campId);
+}
+
+export async function listCampsForUid(uid: string): Promise<CampRecord[]> {
+  const camps = await db.camps.where('uid').equals(uid).sortBy('createdAt');
+  return camps.reverse();
+}
+
+/**
+ * Delete a camp and its roster. Deliberately does NOT touch pendingSessions /
+ * pendingUploads / pendingQuestionnaires / pendingGroundTruths — those are
+ * keyed by session_id and any recording captured at the camp must still sync.
+ */
+export async function deleteCampCascade(campId: string): Promise<void> {
+  await db.transaction('rw', db.camps, db.campChildren, async () => {
+    await db.campChildren.where('campId').equals(campId).delete();
+    await db.camps.delete(campId);
+  });
+}
+
+// --- camp children ----------------------------------------------------------
+
+export async function bulkPutCampChildren(records: CampChildRecord[]): Promise<void> {
+  await db.campChildren.bulkPut(records);
+}
+
+export async function getCampChild(id: string): Promise<CampChildRecord | undefined> {
+  return db.campChildren.get(id);
+}
+
+export async function listCampChildren(campId: string): Promise<CampChildRecord[]> {
+  return db.campChildren.where('campId').equals(campId).sortBy('rowIndex');
+}
+
+export async function updateCampChild(id: string, patch: Partial<CampChildRecord>): Promise<void> {
+  await db.campChildren.update(id, { ...patch, updatedAt: Date.now() });
+}
+
+export async function deleteCampChild(id: string): Promise<void> {
+  await db.campChildren.delete(id);
+}
+
+// --- pending ground truths --------------------------------------------------
+
+export async function putPendingGroundTruth(record: PendingGroundTruthRecord): Promise<void> {
+  await db.pendingGroundTruths.put(record);
+}
+
+export async function listPendingGroundTruths(uid: string): Promise<PendingGroundTruthRecord[]> {
+  return db.pendingGroundTruths.where('uid').equals(uid).sortBy('createdAt');
+}
+
+export async function updatePendingGroundTruth(
+  sessionId: string,
+  patch: Partial<PendingGroundTruthRecord>
+): Promise<void> {
+  await db.pendingGroundTruths.update(sessionId, patch);
+}
+
+export async function deletePendingGroundTruth(sessionId: string): Promise<void> {
+  await db.pendingGroundTruths.delete(sessionId);
 }
 
 // --- metadata cache ---------------------------------------------------------

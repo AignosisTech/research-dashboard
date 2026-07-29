@@ -3,20 +3,26 @@ import { useNavigate } from 'react-router';
 
 import { ArrowRight } from 'lucide-react';
 
+import { useTestStore } from '@/stores/testStore';
+
 export const ThankYou = () => {
   const [timer, setTimer] = useState(5);
   const navigate = useNavigate();
+  // A camp recording returns to its roster so the next child is one tap away.
+  const campId = useTestStore(s => s.testData.camp_id);
+  const destination = campId ? `/camps/${campId}` : '/dashboard';
+  const destinationLabel = campId ? 'camp roster' : 'dashboard';
 
   useEffect(() => {
     if (timer === 0) {
-      navigate('/dashboard', { replace: true });
+      navigate(destination, { replace: true });
       return;
     }
     const interval = setInterval(() => {
       setTimer(prev => prev - 1);
     }, 1000);
     return () => clearInterval(interval);
-  }, [timer, navigate]);
+  }, [timer, navigate, destination]);
 
   return (
     <div className="dark flex min-h-screen flex-col items-center justify-center bg-background text-center">
@@ -76,7 +82,7 @@ export const ThankYou = () => {
           </text>
         </svg>
         <span className="mt-2 flex items-center justify-center font-montserrat text-lg text-foreground">
-          Redirecting to dashboard in 5 seconds
+          Redirecting to {destinationLabel} in 5 seconds
           <ArrowRight className="ml-1 h-4 w-4" />
         </span>
       </div>

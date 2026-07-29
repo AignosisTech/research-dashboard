@@ -33,6 +33,8 @@ export interface ResearchSessionCreatePayload {
    * same derivation as deriveSessionId() — and a replayed create is idempotent.
    */
   client_session_id?: string;
+  /** Camp label when the session was started from a Camp Mode roster. */
+  camp_name?: string;
 }
 
 export interface ResearchSessionCreateResponse {
@@ -105,6 +107,7 @@ export interface ResearchSessionSummary {
   has_questionnaire: boolean;
   patient_info?: { name?: string; dob?: string };
   ground_truth?: GroundTruth | null;
+  camp_name?: string | null;
   /** Which assessments have been filled in — names only; bodies are fetched per-tab. */
   assessment_names?: StoredAssessmentId[];
   created_at?: string | null;

@@ -2,7 +2,9 @@ import axios from 'axios';
 
 import {
   createResearchSession,
+  getSessionGroundTruth,
   patchSessionAssessment,
+  putSessionGroundTruth,
   submitResearchQuestionnaire,
 } from '@/lib/api/research';
 import { queryClient } from '@/lib/react-query/queryClient';
@@ -17,8 +19,10 @@ import {
   db,
   deleteDraftRunsOlderThan,
   deletePendingAssessment,
+  deletePendingGroundTruth,
   deletePendingQuestionnaire,
   listPendingAssessments,
+  listPendingGroundTruths,
   listPendingQuestionnaires,
   listPendingSessionsForUid,
   listUncreatedSessionsForUid,
@@ -35,6 +39,8 @@ import type { SyncStatusSnapshot } from './types';
  *   2. video-run uploads — via the existing flushPendingUploads() safety net
  *   3. questionnaires    — the server 409s until all runs of a session landed
  *   4. assessments       — independent PATCHes, last-write-wins
+ *   5. ground truths     — camp-roster labels, applied once the session exists
+ *                          and only while the server's ground_truth is null
  *
  * Single-flight: concurrent calls set `rerunRequested` instead of being
  * dropped, and the running pass loops again when it finishes.
@@ -81,6 +87,7 @@ const INITIAL_SNAPSHOT: SyncStatusSnapshot = {
   pendingUploadCount: 0,
   pendingQuestionnaireCount: 0,
   pendingAssessmentCount: 0,
+  pendingGroundTruthCount: 0,
   failedCount: 0,
   pausedForAuth: false,
   isSyncing: false,
@@ -117,22 +124,25 @@ export function resumeSyncAfterAuth(): void {
 }
 
 async function refreshCounts(uid: string): Promise<void> {
-  const [sessions, uploadCount, questionnaires, assessments] = await Promise.all([
+  const [sessions, uploadCount, questionnaires, assessments, groundTruths] = await Promise.all([
     listPendingSessionsForUid(uid),
     countPendingUploads(),
     listPendingQuestionnaires(uid),
     listPendingAssessments(uid),
+    listPendingGroundTruths(uid),
   ]);
   const uncreated = sessions.filter(s => s.syncStatus !== 'created');
   const failedCount =
     uncreated.filter(s => s.syncStatus === 'failed').length +
     questionnaires.filter(q => q.syncStatus === 'failed').length +
-    assessments.filter(a => a.syncStatus === 'failed').length;
+    assessments.filter(a => a.syncStatus === 'failed').length +
+    groundTruths.filter(g => g.syncStatus === 'failed').length;
   emit({
     pendingSessionCount: uncreated.length,
     pendingUploadCount: uploadCount,
     pendingQuestionnaireCount: questionnaires.length,
     pendingAssessmentCount: assessments.length,
+    pendingGroundTruthCount: groundTruths.length,
     failedCount,
     pausedForAuth,
     isSyncing: isProcessing,
@@ -349,6 +359,44 @@ async function runSyncPass(options?: { force?: boolean }): Promise<void> {
         hadFailure = true;
         lastSyncError = errorDetail(err);
         await db_markAssessmentFailed(a.id, lastSyncError, a.attempts);
+      }
+    }
+  }
+
+  // 5. Ground truths — camp-roster labels. Only dependency is the session
+  // existing server-side. GET-before-PUT so a manually set label always wins;
+  // either way the queue row is consumed, which also makes replays after a
+  // crash between PUT and delete harmless.
+  if (navigator.onLine && !pausedForAuth) {
+    const groundTruths = await listPendingGroundTruths(uid);
+    const stillUncreated = new Set((await listUncreatedSessionsForUid(uid)).map(s => s.session_id));
+    for (const g of groundTruths) {
+      if (!navigator.onLine || pausedForAuth) break;
+      if (stillUncreated.has(g.session_id)) continue;
+      try {
+        const existing = await getSessionGroundTruth(g.session_id);
+        if (existing == null) {
+          await putSessionGroundTruth(g.session_id, g.payload);
+          console.log('[sync] Ground truth applied', g.session_id);
+        } else {
+          console.log('[sync] Ground truth already set server-side, dropping', g.session_id);
+        }
+        await deletePendingGroundTruth(g.session_id);
+      } catch (err) {
+        console.error('[sync] Ground truth failed', g.session_id, err);
+        if (isUnauthorized(err)) {
+          pausedForAuth = true;
+          lastSyncError = 'Session expired. Sign in to sync pending tests.';
+          emit({ pausedForAuth: true, lastSyncError });
+          break;
+        }
+        hadFailure = true;
+        lastSyncError = errorDetail(err);
+        await db.pendingGroundTruths.update(g.session_id, {
+          syncStatus: 'failed',
+          lastError: lastSyncError,
+          attempts: g.attempts + 1,
+        });
       }
     }
   }

@@ -11,6 +11,7 @@ import {
   type ResearchSessionCreatePayload,
   type StimulusVersion,
 } from '@/lib/api/research';
+import { type CampChildNavState, linkChildToSession } from '@/lib/camps/recordFlow';
 import { estimateOfflineStorageUsage, putPendingSession } from '@/lib/offline/db';
 import { getUidFromToken } from '@/lib/offline/jwt';
 import { canTakeTestOffline } from '@/lib/offline/resourceCache';
@@ -54,7 +55,15 @@ export const Fillup = () => {
   const setTestData = useTestStore(s => s.setTestData);
   const resetTestData = useTestStore(s => s.resetTestData);
 
-  const prefillData = (location.state as { prefill?: PrefillData } | null)?.prefill;
+  const navState = location.state as {
+    prefill?: PrefillData;
+    campChild?: CampChildNavState;
+  } | null;
+  const prefillData = navState?.prefill;
+  // Camp Mode: identity fields come from the roster and are rendered locked so
+  // the queued roster ground truth can never be attached to a different child.
+  const campChild = navState?.campChild;
+  const backTarget = campChild ? `/camps/${campChild.campId}` : '/dashboard';
 
   useEffect(() => {
     resetTestData();
@@ -89,12 +98,12 @@ export const Fillup = () => {
   useEffect(() => {
     const handleBack = () => {
       resetTestData();
-      navigate('/dashboard', { replace: true });
+      navigate(backTarget, { replace: true });
     };
 
     window.addEventListener('popstate', handleBack);
     return () => window.removeEventListener('popstate', handleBack);
-  }, [resetTestData, navigate]);
+  }, [resetTestData, navigate, backTarget]);
 
   const handleNextClick = async () => {
     if (dateOfBirth) {
@@ -147,9 +156,16 @@ export const Fillup = () => {
       data_usage_consent: data.consent,
       stimulus_versions: orderedVersions,
       client_session_id: clientSessionId,
+      ...(campChild ? { camp_name: campChild.campName } : {}),
     };
 
-    const startTest = (sessionId: string) => {
+    const startTest = async (sessionId: string) => {
+      if (campChild) {
+        // Link the roster row to this session and queue its ground truth
+        // before entering the flow, so even a crash mid-test leaves the
+        // linkage (and the queued label) intact.
+        await linkChildToSession(campChild.id, clientSessionId, sessionId);
+      }
       setTestData({
         session_id: sessionId,
         patient_info: patientInfo,
@@ -161,8 +177,12 @@ export const Fillup = () => {
         current_video_index: 1,
         questionnaire_completed: false,
         uploaded_test_ids: [],
+        camp_child_id: campChild?.id ?? null,
+        camp_id: campChild?.campId ?? null,
+        camp_name: campChild?.campName ?? null,
       });
-      navigate('/test/instructions');
+      // Camp mode skips the instructions page — many children back-to-back.
+      navigate(campChild ? '/test/webcam-test' : '/test/instructions');
     };
 
     const startOffline = async () => {
@@ -208,7 +228,7 @@ export const Fillup = () => {
       });
 
       toast.info('No internet — this test will be saved on this device and synced later.');
-      startTest(sessionId);
+      await startTest(sessionId);
     };
 
     setIsSubmitting(true);
@@ -218,7 +238,7 @@ export const Fillup = () => {
         return;
       }
       const session = await createResearchSession(payload);
-      startTest(session.session_id);
+      await startTest(session.session_id);
     } catch (error) {
       // A create that died without an HTTP response (network dropped mid-call)
       // falls back to the offline path — same as starting offline outright.
@@ -270,6 +290,14 @@ export const Fillup = () => {
               Research screening intake
             </h2>
 
+            {campChild && (
+              <p className="mb-4 rounded-lg border border-border bg-muted px-4 py-2 text-sm text-muted-foreground">
+                Child details come from the camp roster —{' '}
+                <span className="text-foreground">{campChild.campName}</span>. To change them, edit
+                the roster.
+              </p>
+            )}
+
             <form className="space-y-4" autoComplete="off">
               <div className="grid grid-cols-1 sm:grid-cols-[180px_1fr] items-center gap-2 sm:gap-4">
                 <label
@@ -284,7 +312,8 @@ export const Fillup = () => {
                   placeholder="Name"
                   value={patientName}
                   onChange={e => setPatientName(e.target.value)}
-                  className="w-full rounded-lg border border-border bg-input px-4 py-2.5 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  disabled={!!campChild}
+                  className="w-full rounded-lg border border-border bg-input px-4 py-2.5 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
                 />
               </div>
 
@@ -297,7 +326,9 @@ export const Fillup = () => {
                 </label>
                 <div
                   className="inline-flex w-full"
-                  onClick={() => dobInputRef.current?.showPicker()}
+                  onClick={() => {
+                    if (!campChild) dobInputRef.current?.showPicker();
+                  }}
                 >
                   <input
                     type="date"
@@ -306,6 +337,7 @@ export const Fillup = () => {
                     ref={dobInputRef}
                     value={dateOfBirth}
                     onChange={handleDateChange}
+                    disabled={!!campChild}
                     min="1900-01-01"
                     max={new Date().toISOString().split('T')[0]}
                     className="pointer-events-none w-full rounded-lg border border-border bg-input px-4 py-[0.6rem] text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
@@ -326,7 +358,8 @@ export const Fillup = () => {
                   value={patientGender}
                   required
                   onChange={e => setPatientGender(e.target.value as 'male' | 'female' | 'other')}
-                  className="w-full rounded-lg border border-border bg-input px-4 py-2.5 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+                  disabled={!!campChild}
+                  className="w-full rounded-lg border border-border bg-input px-4 py-2.5 text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring disabled:opacity-60"
                 >
                   <option value="" disabled className="bg-popover text-muted-foreground">
                     Select Gender
@@ -355,6 +388,7 @@ export const Fillup = () => {
                   onChange={value => setGuardianPhone(value || '')}
                   defaultCountry="IN"
                   placeholder="Patient Guardian Phone"
+                  disabled={!!campChild}
                   className="w-full text-foreground"
                 />
               </div>
@@ -483,7 +517,7 @@ export const Fillup = () => {
 
               <div className="flex gap-2 justify-center items-center pt-2 max-sm:flex-col">
                 <Link
-                  to="/dashboard"
+                  to={backTarget}
                   onClick={() => resetTestData()}
                   className="mt-4 flex w-[150px] items-center justify-center rounded-full border border-primary px-6 py-3 font-semibold text-foreground hover:bg-primary hover:text-primary-foreground transition-colors"
                 >
