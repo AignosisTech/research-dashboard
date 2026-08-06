@@ -3,20 +3,24 @@ import { useNavigate } from 'react-router';
 
 import { ArrowRight } from 'lucide-react';
 
+import { testExitPath } from '@/lib/camps/recordFlow';
+import { useTestStore } from '@/stores/testStore';
+
 export const TestError = () => {
   const [timer, setTimer] = useState(5);
   const navigate = useNavigate();
+  const campId = useTestStore(s => s.testData.camp_id);
 
   useEffect(() => {
     if (timer === 0) {
-      navigate('/dashboard', { replace: true });
+      navigate(testExitPath(campId), { replace: true });
       return;
     }
     const interval = setInterval(() => {
       setTimer(prev => prev - 1);
     }, 1000);
     return () => clearInterval(interval);
-  }, [timer, navigate]);
+  }, [timer, navigate, campId]);
 
   return (
     <div className="dark flex min-h-screen flex-col items-center justify-center bg-background text-center">
@@ -77,7 +81,7 @@ export const TestError = () => {
           </text>
         </svg>
         <span className="mt-2 flex items-center justify-center font-montserrat text-lg text-foreground">
-          Redirecting to dashboard in 5 seconds
+          Redirecting to {campId ? 'the camp page' : 'dashboard'} in 5 seconds
           <ArrowRight className="ml-1 h-4 w-4" />
         </span>
       </div>

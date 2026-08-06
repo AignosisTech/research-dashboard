@@ -6,6 +6,7 @@ import { PendingSyncBadge } from '@/components/dashboard/PendingSyncBadge';
 import { ThemeSwitcher } from '@/components/ThemeSwitcher';
 import { Separator } from '@/components/ui/separator';
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
+import { clearCampOrigin } from '@/lib/camps/campOrigin';
 import { reconcileWithServer } from '@/lib/offline/reconcile';
 import { useOfflineSyncLifecycle } from '@/lib/offline/useSyncStatus';
 
@@ -24,6 +25,13 @@ export const DashboardLayout = ({ children, title, description }: DashboardLayou
   // (kicks a sync pass itself when done).
   useEffect(() => {
     void reconcileWithServer();
+  }, []);
+
+  // Reaching any dashboard-side surface means the capture flow is over — the
+  // per-tab camp origin is consumed, so a later dashboard-started session
+  // cannot exit to a stale camp.
+  useEffect(() => {
+    clearCampOrigin();
   }, []);
 
   return (

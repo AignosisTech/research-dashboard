@@ -51,8 +51,9 @@ import {
 } from '@/lib/camps/constants';
 import { useCamps, useCampUid } from '@/lib/camps/useCampData';
 import { deleteCampCascade, putCamp } from '@/lib/offline/db';
+import { STIMULUS_DURATIONS_SEC, type StimulusLanguage } from '@/lib/offline/stimulus';
 import type { CampRecord } from '@/lib/offline/types';
-import { formatDateShort } from '@/lib/utils';
+import { formatDateShort, formatDuration } from '@/lib/utils';
 
 // Matches the middleware's validate_safe_text so camp_name can never 422 a
 // session create later.
@@ -70,6 +71,8 @@ export const CampsPage = () => {
   const [newScreenSize, setNewScreenSize] = useState('');
   const [newConsent, setNewConsent] = useState(true);
   const [campToDelete, setCampToDelete] = useState<CampRecord | null>(null);
+  // Durations shown in the version picker follow the selected language.
+  const previewLanguage: StimulusLanguage = newLanguage === 'hindi' ? 'hindi' : 'english';
 
   const resetCreateForm = () => {
     setNewName('');
@@ -257,7 +260,11 @@ export const CampsPage = () => {
                       }
                     />
                     <span>
-                      {option.label} <span className="text-muted-foreground">({option.hint})</span>
+                      {option.label}{' '}
+                      <span className="text-muted-foreground">
+                        ({option.hint} ·{' '}
+                        {formatDuration(STIMULUS_DURATIONS_SEC[option.value][previewLanguage])})
+                      </span>
                     </span>
                   </label>
                 ))}

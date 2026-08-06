@@ -31,16 +31,28 @@ export const usePendingUploads = (): UsePendingUploadsResult => {
   useEffect(() => {
     let cancelled = false;
 
-    const refresh = async () => {
+    const refreshRows = async () => {
       const next = await listPendingUploads().catch(() => []);
       if (cancelled) return;
       setRows(next);
-      setFlushState(getFlushState());
     };
 
-    void refresh();
+    void refreshRows();
+    void (async () => {
+      if (!cancelled) setFlushState(getFlushState());
+    })();
+
+    let lastRowSignature = '';
     const unsubscribe = subscribeToPendingUploads(() => {
-      void refresh();
+      const next = getFlushState();
+      // Progress ticks fire many times per second; only re-read the table when
+      // the queue itself changed, not when a byte counter moved.
+      setFlushState(next);
+      const signature = `${next.queueVersion}:${next.isFlushing}:${next.activeId}`;
+      if (signature !== lastRowSignature) {
+        lastRowSignature = signature;
+        void refreshRows();
+      }
     });
 
     return () => {

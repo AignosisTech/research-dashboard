@@ -73,6 +73,8 @@ export function WebcamMicTest() {
   const mirrorCanvasRef = useRef<HTMLCanvasElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
   const preferredCameraRef = useRef<MediaDeviceInfo | null>(null);
+  const switchRequestRef = useRef(0);
+  const devicesRef = useRef<MediaDeviceInfo[]>([]);
 
   const [error, setError] = useState('');
   const [permissionState, setPermissionState] = useState<PermissionState>('initial');
@@ -208,18 +210,32 @@ export function WebcamMicTest() {
     }
   }, [acquireStream, attachStreamToVideo, startAnalysis, updateTestStoreWithCamera]);
 
+  // Keep the ref in step with state so switchCamera does not depend on `devices`.
+  useEffect(() => {
+    devicesRef.current = devices;
+  }, [devices]);
+
   const switchCamera = useCallback(
     async (deviceId: string) => {
       if (!deviceId) return;
+      const requestId = ++switchRequestRef.current;
+      // Release the camera BEFORE re-acquiring it: holding two streams for one
+      // device makes getUserMedia reject with NotReadableError on low-end hardware.
+      stopAnalysis();
+      stopCurrentStream();
       try {
         const newStream = await acquireStream(deviceId);
-        stopCurrentStream();
-        stopAnalysis();
+        // A newer switch superseded this one while it was in flight.
+        if (requestId !== switchRequestRef.current) {
+          newStream.getTracks().forEach(t => t.stop());
+          return;
+        }
         streamRef.current = newStream;
         attachStreamToVideo(newStream);
         startAnalysis(newStream);
-        updateTestStoreWithCamera(deviceId, getCameraLabel(deviceId, devices));
+        updateTestStoreWithCamera(deviceId, getCameraLabel(deviceId, devicesRef.current));
       } catch (err) {
+        if (requestId !== switchRequestRef.current) return;
         console.error('Error switching camera:', err);
         setError('Error switching camera device');
       }
@@ -231,15 +247,23 @@ export function WebcamMicTest() {
       attachStreamToVideo,
       startAnalysis,
       updateTestStoreWithCamera,
-      devices,
     ]
   );
 
   useEffect(() => {
     if (permissionState !== 'granted' || !selectedDevice) return;
     setCameraNotice(getCameraNotice(preferredCameraRef.current, selectedDevice));
+    // The permission handlers already acquired a stream for this device, but
+    // they ran before the <video> element existed — it only mounts once the
+    // state is 'granted'. Re-attach the live stream instead of renegotiating.
+    const liveStream = streamRef.current;
+    const liveDeviceId = liveStream?.getVideoTracks()[0]?.getSettings().deviceId;
+    if (liveStream && liveDeviceId === selectedDevice) {
+      attachStreamToVideo(liveStream);
+      return;
+    }
     switchCamera(selectedDevice);
-  }, [selectedDevice, permissionState, switchCamera]);
+  }, [selectedDevice, permissionState, switchCamera, attachStreamToVideo]);
 
   useEffect(() => {
     return () => {

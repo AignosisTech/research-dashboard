@@ -22,6 +22,15 @@ export const STIMULUS_URLS: Record<StimulusVersion, Record<StimulusLanguage, str
   },
 };
 
+/**
+ * Playlist durations in seconds, measured from each playlist's #EXTINF entries.
+ * Re-measure if the GCS videos are ever replaced.
+ */
+export const STIMULUS_DURATIONS_SEC: Record<StimulusVersion, Record<StimulusLanguage, number>> = {
+  '1': { english: 258.5, hindi: 253.8 },
+  '2': { english: 169.4, hindi: 167.1 },
+};
+
 export const STIMULUS_VERSIONS: StimulusVersion[] = ['1', '2'];
 export const STIMULUS_LANGUAGES: StimulusLanguage[] = ['english', 'hindi'];
 

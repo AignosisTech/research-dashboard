@@ -3,6 +3,8 @@ import { useNavigate } from 'react-router';
 
 import { AlertTriangle, X } from 'lucide-react';
 
+import { markTestExit } from '@/lib/camps/campOrigin';
+import { testExitPath } from '@/lib/camps/recordFlow';
 import { useTestStore } from '@/stores/testStore';
 
 interface ExitTestDialogProps {
@@ -16,9 +18,16 @@ export const ExitTestDialog = ({ isOpen, onClose, onConfirm }: ExitTestDialogPro
   const resetTestData = useTestStore(s => s.resetTestData);
 
   const handleConfirmExit = () => {
+    // Capture the camp origin before resetTestData nulls it.
+    const campId = useTestStore.getState().testData.camp_id;
+    const destination = testExitPath(campId);
+    // The store wipe below re-renders TestRouteGuard while it is still mounted
+    // on the /test/* route, and that render races this navigation. Record the
+    // destination first so the guard redirects to the same place.
+    markTestExit(destination);
     resetTestData();
     onConfirm?.();
-    navigate('/dashboard', { replace: true });
+    navigate(destination, { replace: true });
   };
 
   if (!isOpen) return null;

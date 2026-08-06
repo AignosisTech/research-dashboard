@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router';
 
-import { ArrowLeft, Download, Upload, WifiOff } from 'lucide-react';
+import { ArrowLeft, ArrowRightLeft, Download, Upload, WifiOff } from 'lucide-react';
 import { toast } from 'sonner';
 
 import { CampChildrenTable } from '@/components/camps/CampChildrenTable';
+import { CampTransferDialog } from '@/components/camps/CampTransferDialog';
 import { RosterImportDialog } from '@/components/camps/RosterImportDialog';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -17,6 +18,7 @@ export const CampDetailPage = () => {
   const uid = useCampUid();
   const { camp, children, isLoading, refresh } = useCampDetail(campId);
   const [importOpen, setImportOpen] = useState(false);
+  const [transferOpen, setTransferOpen] = useState(false);
   const [offlineReady, setOfflineReady] = useState<boolean | null>(null);
 
   useEffect(() => {
@@ -70,8 +72,29 @@ export const CampDetailPage = () => {
             <Upload className="h-4 w-4" />
             Import roster
           </Button>
+          {camp && !camp.transfer && children.length > 0 && (
+            <Button variant="outline" onClick={() => setTransferOpen(true)}>
+              <ArrowRightLeft className="h-4 w-4" />
+              Transfer to UPHC
+            </Button>
+          )}
         </div>
       </div>
+
+      {camp?.transfer && (
+        <div className="flex items-center gap-3 rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-sm">
+          <ArrowRightLeft className="h-4 w-4 shrink-0 text-emerald-500" />
+          <p>
+            Transferred to <span className="font-medium">{camp.transfer.uphcName}</span> on{' '}
+            {new Date(camp.transfer.transferredAt).toLocaleDateString('en-IN', {
+              day: 'numeric',
+              month: 'short',
+              year: 'numeric',
+            })}
+            .
+          </p>
+        </div>
+      )}
 
       {offlineReady === false && (
         <div className="flex items-center gap-3 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-sm">
@@ -117,6 +140,16 @@ export const CampDetailPage = () => {
           uid={uid}
           existingChildren={children}
           onImported={refresh}
+        />
+      )}
+
+      {camp && (
+        <CampTransferDialog
+          open={transferOpen}
+          onOpenChange={setTransferOpen}
+          camp={camp}
+          children={children}
+          onTransferred={() => void refresh()}
         />
       )}
     </div>

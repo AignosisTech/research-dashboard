@@ -11,12 +11,15 @@ import {
   type ResearchSessionCreatePayload,
   type StimulusVersion,
 } from '@/lib/api/research';
-import { type CampChildNavState, linkChildToSession } from '@/lib/camps/recordFlow';
+import { clearCampOrigin, rememberCampOrigin } from '@/lib/camps/campOrigin';
+import { CAMP_STIMULUS_VERSION_OPTIONS } from '@/lib/camps/constants';
+import { type CampChildNavState, linkChildToSession, testExitPath } from '@/lib/camps/recordFlow';
 import { estimateOfflineStorageUsage, putPendingSession } from '@/lib/offline/db';
 import { getUidFromToken } from '@/lib/offline/jwt';
 import { canTakeTestOffline } from '@/lib/offline/resourceCache';
 import { deriveSessionId } from '@/lib/offline/session';
-import type { StimulusLanguage } from '@/lib/offline/stimulus';
+import { STIMULUS_DURATIONS_SEC, type StimulusLanguage } from '@/lib/offline/stimulus';
+import { formatDuration } from '@/lib/utils';
 import { fillupFormSchema } from '@/lib/validations/fillup';
 import { validate } from '@/lib/validations/validate';
 import { useAuthStore } from '@/stores/authStore';
@@ -37,10 +40,7 @@ const GENDERS = [
 ] as const;
 
 // Play order is fixed: version 1 (original) before version 2 (new) when both are selected.
-const STIMULUS_VERSION_OPTIONS: { value: StimulusVersion; label: string; hint: string }[] = [
-  { value: '1', label: 'Video 1', hint: 'AST stimulus - V1' },
-  { value: '2', label: 'Video 2', hint: 'AST stimulus - V2' },
-];
+const STIMULUS_VERSION_OPTIONS = CAMP_STIMULUS_VERSION_OPTIONS;
 
 interface PrefillData {
   patientName?: string;
@@ -63,7 +63,7 @@ export const Fillup = () => {
   // Camp Mode: identity fields come from the roster and are rendered locked so
   // the queued roster ground truth can never be attached to a different child.
   const campChild = navState?.campChild;
-  const backTarget = campChild ? `/camps/${campChild.campId}` : '/dashboard';
+  const backTarget = testExitPath(campChild?.campId);
 
   useEffect(() => {
     resetTestData();
@@ -181,6 +181,13 @@ export const Fillup = () => {
         camp_id: campChild?.campId ?? null,
         camp_name: campChild?.campName ?? null,
       });
+      // A dashboard-started session must not exit to a camp left over from an
+      // earlier recording in this tab.
+      if (campChild) {
+        rememberCampOrigin(campChild.campId);
+      } else {
+        clearCampOrigin();
+      }
       // Camp mode skips the instructions page — many children back-to-back.
       navigate(campChild ? '/test/webcam-test' : '/test/instructions');
     };
@@ -448,7 +455,15 @@ export const Fillup = () => {
                       />
                       <span className="text-sm">
                         {option.label}{' '}
-                        <span className="text-muted-foreground">({option.hint})</span>
+                        <span className="text-muted-foreground">
+                          ({option.hint} ·{' '}
+                          {formatDuration(
+                            STIMULUS_DURATIONS_SEC[option.value][
+                              selectedLanguage === 'hindi' ? 'hindi' : 'english'
+                            ]
+                          )}
+                          )
+                        </span>
                       </span>
                     </label>
                   ))}

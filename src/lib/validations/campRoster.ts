@@ -30,7 +30,7 @@ export const campRosterRowSchema = z.object({
       return year >= 1900 && date.getTime() <= Date.now();
     }, 'DOB must be a real date between 1900 and today'),
   gender: z.enum(['male', 'female', 'other'], {
-    message: 'Gender must be male, female or other',
+    message: 'Gender must be male, female or other (m/f, boy/girl etc. are accepted)',
   }),
   guardianPhone: z
     .string()

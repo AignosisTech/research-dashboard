@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import dogImage from '@/assets/dog_face.webp';
 import { Circle } from '@/components/test/Circle';
 import { ExitTestDialog, useExitTestDialog } from '@/components/test/ExitTestDialog';
+import { testExitPath } from '@/lib/camps/recordFlow';
 import { autismFacts } from '@/lib/constants/facts';
 import { SCREENING_VIDEO_CONSTRAINTS } from '@/lib/media/screeningRecording';
 import {
@@ -104,7 +105,11 @@ export const Calibration = () => {
 
   useEffect(() => {
     if (!testData || !testData.patient_info.name || testData.patient_info.name === '') {
-      navigate('/test/fillup', { replace: true });
+      // Camp one-tap sessions never visit the intake form — send them back to
+      // their roster instead of a blank Fillup.
+      navigate(testData?.camp_id ? testExitPath(testData.camp_id) : '/test/fillup', {
+        replace: true,
+      });
       return;
     }
     // Deep-linking into calibration without redoing the webcam check would carry
@@ -133,6 +138,9 @@ export const Calibration = () => {
       }
     };
 
+    let cancelled = false;
+    let localStream: MediaStream | null = null;
+
     const startWebcam = async () => {
       if (!navigator.mediaDevices.getUserMedia) {
         console.error('getUserMedia not supported');
@@ -146,6 +154,12 @@ export const Calibration = () => {
             ...SCREENING_VIDEO_CONSTRAINTS,
           },
         });
+        // Unmounted while getUserMedia was in flight — release immediately.
+        if (cancelled) {
+          stream.getTracks().forEach(track => track.stop());
+          return;
+        }
+        localStream = stream;
         if (videoRef.current) {
           videoRef.current.srcObject = stream;
           videoRef.current.addEventListener('canplay', handleCanPlay);
@@ -158,15 +172,14 @@ export const Calibration = () => {
     startWebcam();
 
     return () => {
+      cancelled = true;
       if (videoEl) {
         videoEl.removeEventListener('canplay', handleCanPlay);
-        if (videoEl.srcObject) {
-          const stream = videoEl.srcObject as MediaStream;
-          if (stream && typeof stream.getTracks === 'function') {
-            stream.getTracks().forEach(track => track.stop());
-          }
-          videoEl.srcObject = null;
-        }
+        videoEl.srcObject = null;
+      }
+      if (localStream) {
+        localStream.getTracks().forEach(track => track.stop());
+        localStream = null;
       }
     };
   }, [testData.device_id, isTestCompleted]);
@@ -195,7 +208,9 @@ export const Calibration = () => {
     if (!encrypted_aes_password || !metadata.video_language) {
       console.error('Missing required test data');
       toast.error('Missing required test data');
-      navigate('/test/fillup', { replace: true });
+      navigate(testData.camp_id ? testExitPath(testData.camp_id) : '/test/fillup', {
+        replace: true,
+      });
       return;
     }
 
@@ -393,7 +408,9 @@ export const Calibration = () => {
           });
         } catch (error) {
           console.error('Processing error:', error);
-          navigate('/test/fillup', { replace: true });
+          navigate(testData.camp_id ? testExitPath(testData.camp_id) : '/test/fillup', {
+            replace: true,
+          });
         }
       }
 

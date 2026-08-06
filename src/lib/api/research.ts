@@ -108,6 +108,8 @@ export interface ResearchSessionSummary {
   patient_info?: { name?: string; dob?: string };
   ground_truth?: GroundTruth | null;
   camp_name?: string | null;
+  /** Set when the session's tests were handed over to a UPHC clinic. */
+  transferred_to_pid?: string | null;
   /** Which assessments have been filled in — names only; bodies are fetched per-tab. */
   assessment_names?: StoredAssessmentId[];
   created_at?: string | null;
@@ -401,6 +403,66 @@ export const patchSessionAssessment = async <T = StoredAssessment>(
   );
   if (!data.success) {
     throw new Error(data.message || 'Failed to save assessment');
+  }
+  return data.details;
+};
+
+/** A UPHC/UCHC clinic that can receive transferred camp tests. */
+export interface UphcClinic {
+  pid: string;
+  clinic_name: string;
+}
+
+export const getResearchUphcs = async (): Promise<UphcClinic[]> => {
+  const { data } = await apiClient.get<ApiResponse<{ items: UphcClinic[] }>>('/research/uphcs');
+  if (!data.success) {
+    throw new Error(data.message || 'Failed to fetch UPHC clinics');
+  }
+  return data.details.items;
+};
+
+export type TransferTestStatus = 'transferred' | 'already_transferred' | 'skipped' | 'failed';
+
+export interface TransferTestResult {
+  video_index: number;
+  tid: string;
+  status: TransferTestStatus;
+  reason: string | null;
+}
+
+export interface TransferSessionResult {
+  session_id: string;
+  status: TransferTestStatus;
+  reason: string | null;
+  tests: TransferTestResult[];
+}
+
+export interface TransferCampResult {
+  sessions: TransferSessionResult[];
+  summary: {
+    requested: number;
+    transferred: number;
+    already_transferred: number;
+    skipped: number;
+    failed: number;
+  };
+}
+
+/**
+ * Hand a camp's uploaded tests over to a UPHC clinic. Idempotent on the server:
+ * retrying after a partial failure resumes instead of duplicating.
+ */
+export const transferCampToUphc = async (payload: {
+  uphc_pid: string;
+  camp_name: string;
+  session_ids: string[];
+}): Promise<TransferCampResult> => {
+  const { data } = await apiClient.post<ApiResponse<TransferCampResult>>(
+    '/research/transfer-camp',
+    payload
+  );
+  if (!data.success) {
+    throw new Error(data.message || 'Failed to transfer camp tests');
   }
   return data.details;
 };

@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { ExitTestDialog } from '@/components/test/ExitTestDialog';
 import { VideoPlayer } from '@/components/test/VideoPlayer';
 import { type StimulusVersion, uploadResearchTestData } from '@/lib/api/research';
+import { testExitPath } from '@/lib/camps/recordFlow';
 import {
   blobTypeForRecordedChunks,
   createScreeningMediaRecorder,
@@ -77,7 +78,7 @@ export const VideoPlayback = () => {
 
   useEffect(() => {
     if (!testData?.patient_info?.name || !testData.session_id) {
-      navigate('/dashboard', { replace: true });
+      navigate(testExitPath(testData.camp_id), { replace: true });
       return;
     }
 

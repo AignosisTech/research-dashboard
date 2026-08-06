@@ -19,6 +19,16 @@ const CENTRE_TOLERANCE = 0.15;
 const MIN_SCORE = 0.6;
 const MIN_EYE_SEPARATION = 0.05;
 const SUCCESS_FRAMES_REQUIRED = 4;
+/** ~5 Hz, matching useLightingCheck's cadence */
+const DETECT_INTERVAL_MS = 200;
+
+/** Skip the state write when nothing the UI renders actually changed. */
+const sameVisibleState = (a: FaceDetectorState, b: FaceDetectorState) =>
+  a.status === b.status &&
+  a.message === b.message &&
+  a.isSuccess === b.isSuccess &&
+  a.movementHints.length === b.movementHints.length &&
+  a.movementHints.every((hint, i) => hint === b.movementHints[i]);
 
 type WithLandmarks = faceapi.WithFaceLandmarks<
   { detection: faceapi.FaceDetection },
@@ -198,7 +208,12 @@ export function useFaceDetector(
       scoreThreshold: MIN_SCORE,
     });
 
+    let cancelled = false;
+    let lastDetectAt = 0;
+
     async function tick() {
+      if (cancelled) return;
+
       if (!videoRef.current || video.paused || video.readyState < 2) {
         rafRef.current = requestAnimationFrame(tick);
         return;
@@ -211,27 +226,40 @@ export function useFaceDetector(
         return;
       }
 
+      // Sample at a fixed cadence instead of every frame: detection is the most
+      // expensive main-thread work on the page and the UI only shows a status.
+      const now = performance.now();
+      if (now - lastDetectAt < DETECT_INTERVAL_MS) {
+        rafRef.current = requestAnimationFrame(tick);
+        return;
+      }
+      lastDetectAt = now;
+
       try {
         const frameStart = performance.now();
         const results = await faceapi.detectAllFaces(video, options).withFaceLandmarks(true);
+        if (cancelled) return; // unmounted mid-detection: do not re-arm
         const frameEvalMs = performance.now() - frameStart;
 
         if (!results || results.length === 0) {
           successStreakRef.current = 0;
-          setState({
-            status: 'no_face',
-            message: tCur.noFace,
-            metrics: null,
-            movementHints: [],
-            debug: {
-              totalFaces: 0,
-              validFaces: 0,
-              bestDetectionScore: null,
-              frameEvalMs,
-            },
-            isSuccess: false,
-            modelsLoaded: true,
-            error: null,
+          setState(prev => {
+            const next: FaceDetectorState = {
+              status: 'no_face',
+              message: tCur.noFace,
+              metrics: null,
+              movementHints: [],
+              debug: {
+                totalFaces: 0,
+                validFaces: 0,
+                bestDetectionScore: null,
+                frameEvalMs,
+              },
+              isSuccess: false,
+              modelsLoaded: true,
+              error: null,
+            };
+            return sameVisibleState(prev, next) ? prev : next;
           });
           rafRef.current = requestAnimationFrame(tick);
           return;
@@ -246,20 +274,23 @@ export function useFaceDetector(
 
         if (validResults.length === 0) {
           successStreakRef.current = 0;
-          setState({
-            status: 'adjust',
-            message: tCur.faceCamera,
-            metrics: null,
-            movementHints: [],
-            debug: {
-              totalFaces: results.length,
-              validFaces: 0,
-              bestDetectionScore: results[0]?.detection.score ?? null,
-              frameEvalMs,
-            },
-            isSuccess: false,
-            modelsLoaded: true,
-            error: null,
+          setState(prev => {
+            const next: FaceDetectorState = {
+              status: 'adjust',
+              message: tCur.faceCamera,
+              metrics: null,
+              movementHints: [],
+              debug: {
+                totalFaces: results.length,
+                validFaces: 0,
+                bestDetectionScore: results[0]?.detection.score ?? null,
+                frameEvalMs,
+              },
+              isSuccess: false,
+              modelsLoaded: true,
+              error: null,
+            };
+            return sameVisibleState(prev, next) ? prev : next;
           });
           rafRef.current = requestAnimationFrame(tick);
           return;
@@ -289,55 +320,64 @@ export function useFaceDetector(
 
         if (!covered) {
           successStreakRef.current = 0;
-          setState({
-            status: 'adjust',
-            message: tCur.moveCloser,
-            metrics,
-            movementHints,
-            debug: {
-              totalFaces: results.length,
-              validFaces: validResults.length,
-              bestDetectionScore,
-              frameEvalMs,
-            },
-            isSuccess: false,
-            modelsLoaded: true,
-            error: null,
-          });
-        } else if (!centred) {
-          successStreakRef.current = 0;
-          setState({
-            status: 'adjust',
-            message: buildDirectionHint(movementHints, language),
-            metrics,
-            movementHints,
-            debug: {
-              totalFaces: results.length,
-              validFaces: validResults.length,
-              bestDetectionScore,
-              frameEvalMs,
-            },
-            isSuccess: false,
-            modelsLoaded: true,
-            error: null,
-          });
-        } else {
-          successStreakRef.current += 1;
-          if (successStreakRef.current >= SUCCESS_FRAMES_REQUIRED) {
-            setState({
-              status: 'success',
-              message: tCur.faceSuccess,
+          setState(prev => {
+            const next: FaceDetectorState = {
+              status: 'adjust',
+              message: tCur.moveCloser,
               metrics,
-              movementHints: [],
+              movementHints,
               debug: {
                 totalFaces: results.length,
                 validFaces: validResults.length,
                 bestDetectionScore,
                 frameEvalMs,
               },
-              isSuccess: true,
+              isSuccess: false,
               modelsLoaded: true,
               error: null,
+            };
+            return sameVisibleState(prev, next) ? prev : next;
+          });
+        } else if (!centred) {
+          successStreakRef.current = 0;
+          setState(prev => {
+            const next: FaceDetectorState = {
+              status: 'adjust',
+              message: buildDirectionHint(movementHints, language),
+              metrics,
+              movementHints,
+              debug: {
+                totalFaces: results.length,
+                validFaces: validResults.length,
+                bestDetectionScore,
+                frameEvalMs,
+              },
+              isSuccess: false,
+              modelsLoaded: true,
+              error: null,
+            };
+            return sameVisibleState(prev, next) ? prev : next;
+          });
+        } else {
+          successStreakRef.current += 1;
+          if (successStreakRef.current >= SUCCESS_FRAMES_REQUIRED) {
+            setState(prev => {
+              const next: FaceDetectorState = {
+                status: 'success',
+                message: tCur.faceSuccess,
+                metrics,
+                movementHints: [],
+                debug: {
+                  totalFaces: results.length,
+                  validFaces: validResults.length,
+                  bestDetectionScore,
+                  frameEvalMs,
+                },
+                isSuccess: true,
+                modelsLoaded: true,
+                error: null,
+              };
+              return sameVisibleState(prev, next) ? prev : next;
             });
           } else {
             setState(prev => ({
@@ -360,11 +400,13 @@ export function useFaceDetector(
         // skip bad frames
       }
 
+      if (cancelled) return;
       rafRef.current = requestAnimationFrame(tick);
     }
 
     rafRef.current = requestAnimationFrame(tick);
     return () => {
+      cancelled = true;
       if (rafRef.current != null) {
         cancelAnimationFrame(rafRef.current);
         rafRef.current = null;

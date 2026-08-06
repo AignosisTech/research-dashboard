@@ -57,15 +57,30 @@ export interface FlushState {
   /** Id of the row currently uploading, if any. */
   activeId: string | null;
   activeProgress: UploadProgressPayload | null;
+  /**
+   * Bumped only when the queue itself changes — a row added, removed, or its
+   * status updated. Never bumped on an upload-progress tick, so subscribers can
+   * tell a real queue change from a byte counter moving.
+   */
+  queueVersion: number;
 }
 
-let flushState: FlushState = { isFlushing: false, activeId: null, activeProgress: null };
+let flushState: FlushState = {
+  isFlushing: false,
+  activeId: null,
+  activeProgress: null,
+  queueVersion: 0,
+};
 
 export const getFlushState = (): FlushState => flushState;
 
 const setFlushState = (next: Partial<FlushState>) => {
   flushState = { ...flushState, ...next };
   notify();
+};
+
+const notifyQueueChanged = () => {
+  setFlushState({ queueVersion: flushState.queueVersion + 1 });
 };
 
 // --- persistence ------------------------------------------------------------
@@ -78,7 +93,7 @@ export const savePendingUpload = async (
     await db.pendingUploads.put(meta);
     await db.pendingUploadBlobs.put(blobs);
   });
-  notify();
+  notifyQueueChanged();
 };
 
 export const deletePendingUpload = async (id: string): Promise<void> => {
@@ -86,7 +101,7 @@ export const deletePendingUpload = async (id: string): Promise<void> => {
     await db.pendingUploads.delete(id);
     await db.pendingUploadBlobs.delete(id);
   });
-  notify();
+  notifyQueueChanged();
 };
 
 /** List pending uploads, oldest first. Never loads blobs. */
@@ -131,12 +146,12 @@ const inFlightIds = new Set<string>();
 
 export const markUploadInFlight = (id: string) => {
   inFlightIds.add(id);
-  notify();
+  notifyQueueChanged();
 };
 
 export const clearUploadInFlight = (id: string) => {
   inFlightIds.delete(id);
-  notify();
+  notifyQueueChanged();
 };
 
 export const isUploadInFlight = (id: string) => inFlightIds.has(id);
@@ -210,6 +225,7 @@ export const flushPendingUploads = async (): Promise<FlushResult | null> => {
           last_error: description,
           last_attempt_at: Date.now(),
         });
+        notifyQueueChanged();
         result.failed += 1;
       }
     }

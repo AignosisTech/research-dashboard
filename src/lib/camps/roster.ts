@@ -95,11 +95,36 @@ function normalizeDob(value: unknown): string {
   return text;
 }
 
+/** Accepted spellings -> canonical gender. Unknown text falls through to the zod error. */
+const GENDER_SYNONYMS: Record<string, 'male' | 'female' | 'other'> = {
+  male: 'male',
+  m: 'male',
+  boy: 'male',
+  boys: 'male',
+  b: 'male',
+  man: 'male',
+  men: 'male',
+  female: 'female',
+  f: 'female',
+  girl: 'female',
+  girls: 'female',
+  g: 'female',
+  woman: 'female',
+  women: 'female',
+  w: 'female',
+  other: 'other',
+  others: 'other',
+  o: 'other',
+};
+
 function normalizeGender(value: string): string {
-  const text = value.trim().toLowerCase();
-  if (text === 'm' || text === 'boy') return 'male';
-  if (text === 'f' || text === 'girl') return 'female';
-  return text;
+  const text = value
+    .trim()
+    .toLowerCase()
+    .replace(/[.,;:]+$/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return GENDER_SYNONYMS[text] ?? text;
 }
 
 /** Flatten an exceljs cell value (richText, hyperlink, formula result, ...) to a string. */
@@ -315,6 +340,9 @@ export async function downloadRosterTemplate(): Promise<void> {
   }
   allowed.addRow([]);
   allowed.addRow(['Multiple ground-truth labels can be combined with ";" e.g. "ADHD; Epilepsy"']);
+  allowed.addRow([
+    'Gender spellings like M / F, Boy / Girl, Man / Woman, Others are accepted at import.',
+  ]);
   allowed.columns.forEach(column => {
     column.width = 34;
   });

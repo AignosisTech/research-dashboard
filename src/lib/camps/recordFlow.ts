@@ -4,6 +4,7 @@ import { isAxiosError } from 'axios';
 import { toast } from 'sonner';
 
 import { createResearchSession, type ResearchSessionCreatePayload } from '@/lib/api/research';
+import { rememberCampOrigin, resolveCampId } from '@/lib/camps/campOrigin';
 import {
   db,
   deletePendingGroundTruth,
@@ -29,6 +30,17 @@ export interface CampChildNavState {
   id: string;
   campId: string;
   campName: string;
+}
+
+/**
+ * Where leaving the test flow (finish, quit, error) should land: back on the
+ * camp the session was started from, or the dashboard for non-camp sessions.
+ * Falls back to the per-tab camp origin so an exit still finds its roster when
+ * the store was already wiped (see campOrigin.ts).
+ */
+export function testExitPath(campId: string | null | undefined): string {
+  const resolved = resolveCampId(campId);
+  return resolved ? `/camps/${resolved}` : '/dashboard';
 }
 
 /**
@@ -123,6 +135,7 @@ export async function startCampChildSession(
       camp_id: camp.id,
       camp_name: camp.name,
     });
+    rememberCampOrigin(camp.id);
     // Camp mode skips the instructions page — the operator runs many children
     // back-to-back and has read it long ago. Straight to the system check.
     navigate('/test/webcam-test');

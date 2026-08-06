@@ -191,6 +191,22 @@ export const formatBillingPeriod = (month: string): string => {
 };
 
 /**
+ * Formats a duration in seconds as m:ss.
+ *
+ * @param seconds - Duration in seconds (fractions are rounded)
+ * @returns A formatted duration string (e.g., "4:19")
+ *
+ * @example
+ * formatDuration(258.5) // "4:19"
+ */
+export const formatDuration = (seconds: number): string => {
+  const total = Math.round(seconds);
+  const mins = Math.floor(total / 60);
+  const secs = total % 60;
+  return `${mins}:${String(secs).padStart(2, '0')}`;
+};
+
+/**
  * Formats a date string in Indian locale (DD Mon YYYY).
  *
  * @param dateStr - The date string to format

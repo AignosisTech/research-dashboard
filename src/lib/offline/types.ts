@@ -123,6 +123,15 @@ export interface CampSettings {
  * (IndexedDB) — the server never stores a roster. The only server-side trace is
  * the camp_name tag on sessions recorded from this camp.
  */
+/** Recorded locally once the camp's tests were handed over to a UPHC clinic. */
+export interface CampTransferRecord {
+  uphcPid: string;
+  uphcName: string;
+  transferredAt: number;
+  /** Session ids that were transferred (synced children at transfer time). */
+  sessionIds: string[];
+}
+
 export interface CampRecord {
   /** crypto.randomUUID() */
   id: string;
@@ -131,6 +140,8 @@ export interface CampRecord {
   location?: string;
   /** Absent only on camps created before settings existed — those fall back to the intake form. */
   settings?: CampSettings;
+  /** Set once the camp's tests were transferred to a UPHC. */
+  transfer?: CampTransferRecord;
   createdAt: number;
   updatedAt: number;
 }

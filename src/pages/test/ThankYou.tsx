@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router';
 
 import { ArrowRight } from 'lucide-react';
 
+import { testExitPath } from '@/lib/camps/recordFlow';
 import { useTestStore } from '@/stores/testStore';
 
 export const ThankYou = () => {
@@ -10,7 +11,7 @@ export const ThankYou = () => {
   const navigate = useNavigate();
   // A camp recording returns to its roster so the next child is one tap away.
   const campId = useTestStore(s => s.testData.camp_id);
-  const destination = campId ? `/camps/${campId}` : '/dashboard';
+  const destination = testExitPath(campId);
   const destinationLabel = campId ? 'camp roster' : 'dashboard';
 
   useEffect(() => {

@@ -8,14 +8,14 @@ import { Questionnaire, type QuestionnaireData } from '@/components/test/Questio
 import { TestSubmitLoader } from '@/components/test/TestSubmitLoader';
 import { type ResearchTestUploadResponse, submitResearchQuestionnaire } from '@/lib/api/research';
 import type { QuestionnaireData as ApiQuestionnaireData } from '@/lib/api/screening';
-import { markCampChildRecorded } from '@/lib/camps/recordFlow';
+import { markCampChildRecorded, testExitPath } from '@/lib/camps/recordFlow';
 import { autismFacts } from '@/lib/constants/facts';
 import { putPendingQuestionnaire } from '@/lib/offline/db';
 import { getUidFromToken } from '@/lib/offline/jwt';
 import { processSyncQueue } from '@/lib/offline/syncManager';
 import { queryClient } from '@/lib/react-query/queryClient';
 import { useAuthStore } from '@/stores/authStore';
-import { useTestStore } from '@/stores/testStore';
+import { type RunUploadResult, useTestStore } from '@/stores/testStore';
 
 const NEW_FACT_INTERVAL = 7000;
 
@@ -31,6 +31,7 @@ export const QuestionnairePage = () => {
   const [submissionPhase, setSubmissionPhase] = useState<'upload' | 'questionnaire' | 'finishing'>(
     'upload'
   );
+  const [isOffline, setIsOffline] = useState(() => !navigator.onLine);
   const [isFormFilled, setIsFormFilled] = useState(false);
   const [queuedQuestionnaire, setQueuedQuestionnaire] = useState<QuestionnaireData | null>(null);
   const [skippedQuestionnaire, setSkippedQuestionnaire] = useState(false);
@@ -39,9 +40,9 @@ export const QuestionnairePage = () => {
 
   useEffect(() => {
     if (uploadPromises.length === 0 || !testData.session_id) {
-      navigate('/dashboard', { replace: true });
+      navigate(testExitPath(testData.camp_id), { replace: true });
     }
-  }, [uploadPromises.length, testData.session_id, navigate]);
+  }, [uploadPromises.length, testData.session_id, testData.camp_id, navigate]);
 
   // A resumed session may already have its questionnaire — the server allows
   // only one per session, so skip straight to awaiting the uploads.
@@ -62,6 +63,18 @@ export const QuestionnairePage = () => {
     }
   }, [isFormFilled]);
 
+  // The loader's copy must not claim "uploading" while the device is offline.
+  useEffect(() => {
+    const onOnline = () => setIsOffline(false);
+    const onOffline = () => setIsOffline(true);
+    window.addEventListener('online', onOnline);
+    window.addEventListener('offline', onOffline);
+    return () => {
+      window.removeEventListener('online', onOnline);
+      window.removeEventListener('offline', onOffline);
+    };
+  }, []);
+
   useEffect(() => {
     const processSubmission = async () => {
       if (uploadPromises.length === 0 || isProcessingRef.current || !testData.session_id) return;
@@ -73,12 +86,27 @@ export const QuestionnairePage = () => {
 
       try {
         setSubmissionPhase('upload');
-        const uploadResponses = await Promise.all(uploadPromises);
+        const settled = await Promise.allSettled(uploadPromises);
+
+        const fulfilled = settled
+          .filter((s): s is PromiseFulfilledResult<RunUploadResult> => s.status === 'fulfilled')
+          .map(s => s.value);
+        const rejectedCount = settled.length - fulfilled.length;
+
+        if (rejectedCount > 0) {
+          // The run's encrypted payload is already queued in Dexie, so a failed
+          // in-flight upload is the same situation as an offline run: the sync
+          // engine owns it from here. Do not discard the runs that did land.
+          settled
+            .filter((s): s is PromiseRejectedResult => s.status === 'rejected')
+            .forEach(s => console.error('Run upload failed, deferred to sync queue:', s.reason));
+        }
+
         // Runs saved locally (offline) resolve without a tid.
-        const serverResponses = uploadResponses.filter(
+        const serverResponses = fulfilled.filter(
           (r): r is ResearchTestUploadResponse => !('offline' in r)
         );
-        const anyLocal = serverResponses.length < uploadResponses.length;
+        const anyLocal = rejectedCount > 0 || serverResponses.length < fulfilled.length;
         const lastTid = serverResponses[serverResponses.length - 1]?.tid;
         if (lastTid) {
           setTestData({ test_id: lastTid });
@@ -139,7 +167,13 @@ export const QuestionnairePage = () => {
         void queryClient.invalidateQueries({ queryKey: ['researchSessions'] });
 
         if (testData.camp_child_id) {
-          await markCampChildRecorded(testData.camp_child_id);
+          // A roster-marking failure must not discard a submission whose data
+          // is already durable — the child really was recorded.
+          try {
+            await markCampChildRecorded(testData.camp_child_id);
+          } catch (markErr) {
+            console.error('Failed to mark camp child recorded:', markErr);
+          }
         }
 
         clearUploadPromises();
@@ -204,6 +238,7 @@ export const QuestionnairePage = () => {
           factIndex={factIndex}
           phase={submissionPhase}
           uploadProgress={uploadProgress}
+          offline={isOffline}
         />
       )}
     </div>
